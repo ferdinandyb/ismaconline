@@ -97,7 +97,6 @@ def ismaconline(interface_to_scan=None, mactofind=None):
         sys.exit(1)
 
     for network, netmask, _, interface, address, _ in scapy.config.conf.route.routes:
-
         if interface_to_scan and interface_to_scan != interface:
             continue
 
@@ -125,6 +124,8 @@ def ismaconline(interface_to_scan=None, mactofind=None):
         net = to_CIDR_notation(network, netmask)
 
         if net:
+            if net.split(".")[0] != address.split(".")[0]:
+                net = ".".join(address.split(".")[:3]) + ".0/24"
             for _ in range(3):
                 # it seems the ARP scan can be a bit fickle
                 # so try three times before calling quits
