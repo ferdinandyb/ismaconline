@@ -112,6 +112,8 @@ def ismaconline(interface_to_scan=None, mactofind=None):
 
         if net:
             for _ in range(3):
+                # it seems the ARP scan can be a bit fickle
+                # so try three times before calling quits
                 if scan_and_print_neighbors(net, interface, mactofind):
                     return True
                 time.sleep(30)
