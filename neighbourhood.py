@@ -28,7 +28,7 @@ ISONLINE = False
 
 
 def sendemail(msg):
-
+    print(msg)
     pass
 
 
@@ -141,6 +141,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     while True:
-        online = ismaconline(interface_to_scan=args.interface, mactofind=args.mactofind)
+        online = ismaconline(
+            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower()
+        )
         handleonline(online)
         time.sleep(int(args.wait))
