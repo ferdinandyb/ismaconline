@@ -15,6 +15,11 @@ import errno
 import os
 import sys
 import time
+from secrets import FROM, mailserver, pwd, TO, body, subject
+import smtplib
+from email.message import EmailMessage
+
+import ssl
 
 
 logging.basicConfig(
@@ -28,8 +33,17 @@ ISONLINE = False
 
 
 def sendemail(msg):
+    context = ssl.create_default_context()
+
+    with smtplib.SMTP_SSL(mailserver, 465, context=context) as server:
+        server.login(FROM, pwd)
+        mail = EmailMessage()
+        mail.set_content(body(msg))
+        mail['Subject'] =  subject(msg)
+        mail["From"] = FROM
+        mail["To"] = TO
+        server.send_message(mail)
     print(msg)
-    pass
 
 
 def long2net(arg):
