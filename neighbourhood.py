@@ -15,7 +15,7 @@ import errno
 import os
 import sys
 import time
-from secrets import FROM, mailserver, pwd, TO, body, subject
+from secrets import FROM, mailserver, user, pwd, TO, body, subject
 import smtplib
 from email.message import EmailMessage
 
@@ -36,7 +36,7 @@ def sendemail(msg):
     context = ssl.create_default_context()
 
     with smtplib.SMTP_SSL(mailserver, 465, context=context) as server:
-        server.login(FROM, pwd)
+        server.login(user, pwd)
         mail = EmailMessage()
         mail.set_content(body(msg))
         mail['Subject'] =  subject(msg)
