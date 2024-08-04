@@ -91,7 +91,7 @@ def scan_and_print_neighbors(net, interface, mactofind, timeout=15):
     return False
 
 
-def ismaconline(interface_to_scan=None, mactofind=None):
+def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_delay=60):
     if os.geteuid() != 0:
         print("You need to be root to run this script", file=sys.stderr)
         sys.exit(1)
@@ -126,12 +126,12 @@ def ismaconline(interface_to_scan=None, mactofind=None):
         if net:
             if net.split(".")[0] != address.split(".")[0]:
                 net = ".".join(address.split(".")[:3]) + ".0/24"
-            for _ in range(5):
+            for _ in range(retry_num):
                 # it seems the ARP scan can be a bit fickle
                 # so try three times before calling quits
                 if scan_and_print_neighbors(net, interface, mactofind):
                     return True
-                time.sleep(30)
+                time.sleep(retry_delay)
         return False
 
 
@@ -154,12 +154,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--interface")
     parser.add_argument("-m", "--mactofind")
-    parser.add_argument("-w", "--wait", default=600)
+    parser.add_argument("-w", "--wait", default=600, help="number of seconds to sleep between checking")
+    parser.add_argument("-n","--retry-num", default=5, help="number of retries in a check before accepting negative answer")
+    parser.add_argument("-d","--retry-delay", default = 60, help="number of seconds to wait between retries")
 
     args = parser.parse_args()
     while True:
         online = ismaconline(
-            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower()
+            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower(), retry_num = args.retry_num, retry_delay=args.retry_delay
         )
         handleonline(online)
         time.sleep(int(args.wait))
