@@ -126,7 +126,7 @@ def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_delay
         if net:
             if net.split(".")[0] != address.split(".")[0]:
                 net = ".".join(address.split(".")[:3]) + ".0/24"
-            for _ in range(retry_num):
+            for _ in range(retry_num if ISONLINE else 1):
                 # it seems the ARP scan can be a bit fickle
                 # so try three times before calling quits
                 if scan_and_print_neighbors(net, interface, mactofind):
