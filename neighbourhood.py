@@ -154,9 +154,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--interface")
     parser.add_argument("-m", "--mactofind")
-    parser.add_argument("-w", "--wait", default=600, help="number of seconds to sleep between checking")
+    parser.add_argument("-w", "--wait", default=60*30, help="number of seconds to sleep between checking")
     parser.add_argument("-n","--retry-num", default=5, help="number of retries in a check before accepting negative answer")
-    parser.add_argument("-d","--retry-delay", default = 60, help="number of seconds to wait between retries")
+    parser.add_argument("-d","--retry-delay", default = 90, help="number of seconds to wait between retries")
 
     args = parser.parse_args()
     while True:
