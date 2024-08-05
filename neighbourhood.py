@@ -91,7 +91,7 @@ def scan_and_print_neighbors(net, interface, mactofind, timeout=15):
     return False
 
 
-def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_delay=60):
+def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_num_fastpath=2, retry_delay=60):
     if os.geteuid() != 0:
         print("You need to be root to run this script", file=sys.stderr)
         sys.exit(1)
@@ -126,7 +126,7 @@ def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_delay
         if net:
             if net.split(".")[0] != address.split(".")[0]:
                 net = ".".join(address.split(".")[:3]) + ".0/24"
-            loopnum = retry_num if ISONLINE else 1
+            loopnum = int(retry_num if ISONLINE else retry_num_fastpath)
             for i in range(loopnum):
                 logging.info(f"running loop {i+1}{loopnum}")
                 # it seems the ARP scan can be a bit fickle
@@ -157,14 +157,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--interface")
     parser.add_argument("-m", "--mactofind")
-    parser.add_argument("-w", "--wait", default=60*30, help="number of seconds to sleep between checking")
-    parser.add_argument("-n","--retry-num", default=5, help="number of retries in a check before accepting negative answer")
-    parser.add_argument("-d","--retry-delay", default = 90, help="number of seconds to wait between retries")
+    parser.add_argument("-w", "--wait",type=int, default=60*30, help="number of seconds to sleep between checking")
+    parser.add_argument("-n","--retry-num",type=int, default=10, help="number of retries in a check before accepting negative answer when state is known to be positive")
+    parser.add_argument("-N","--retry-num-fastpath",type=int, default=2, help="number of retries in a check before accepting negative answer when state is known to be negative")
+    parser.add_argument("-d","--retry-delay",type=int, default = 90, help="number of seconds to wait between retries")
 
     args = parser.parse_args()
     while True:
         online = ismaconline(
-            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower(), retry_num = args.retry_num, retry_delay=args.retry_delay
+            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower(), retry_num = args.retry_num, retry_num_fastpath = args.retry_num_fastpath, retry_delay=args.retry_delay
         )
         handleonline(online)
         time.sleep(int(args.wait))
