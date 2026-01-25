@@ -29,7 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ISONLINE = False
+last_online_time = None
+notified_online = False
 
 
 def sendemail(msg):
@@ -39,7 +40,7 @@ def sendemail(msg):
         server.login(user, pwd)
         mail = EmailMessage()
         mail.set_content(body(msg))
-        mail['Subject'] =  subject(msg)
+        mail["Subject"] = subject(msg)
         mail["From"] = FROM
         mail["To"] = TO
         server.send_message(mail)
@@ -91,7 +92,8 @@ def scan_and_print_neighbors(net, interface, mactofind, timeout=15):
     return False
 
 
-def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_num_fastpath=2, retry_delay=60):
+def scan_once(interface_to_scan, mactofind):
+    """Perform a single ARP scan and return True if MAC is found."""
     if os.geteuid() != 0:
         print("You need to be root to run this script", file=sys.stderr)
         sys.exit(1)
@@ -126,46 +128,63 @@ def ismaconline(interface_to_scan=None, mactofind=None, retry_num=5, retry_num_f
         if net:
             if net.split(".")[0] != address.split(".")[0]:
                 net = ".".join(address.split(".")[:3]) + ".0/24"
-            loopnum = int(retry_num if ISONLINE else retry_num_fastpath)
-            for i in range(loopnum):
-                logging.info(f"running loop {i+1}{loopnum}")
-                # it seems the ARP scan can be a bit fickle
-                # so try three times before calling quits
-                if scan_and_print_neighbors(net, interface, mactofind):
-                    return True
-                time.sleep(retry_delay)
-        return False
+            if scan_and_print_neighbors(net, interface, mactofind):
+                return True
+    return False
 
 
-def handleonline(online):
-    global ISONLINE
-    if online == ISONLINE:
-        return
-    logging.info(f"handling status {online=}")
-    if ISONLINE:
-        sendemail("szippantás történt")
-        ISONLINE = False
+def handleonline(online, cooldown):
+    """Handle state transitions with time-based cooldown."""
+    global last_online_time, notified_online
+    now = time.time()
+
+    if online:
+        if not notified_online:
+            sendemail("szippantani kell")
+            notified_online = True
+        last_online_time = now
+        logging.info(f"Device seen, last_online_time updated")
     else:
-        # send need szippantás
-        sendemail("szippantani kell")
-        ISONLINE = True
+        if notified_online and last_online_time:
+            time_since_last_seen = now - last_online_time
+            logging.info(
+                f"Device not seen, time since last seen: {time_since_last_seen:.0f}s / {cooldown}s"
+            )
+            if time_since_last_seen > cooldown:
+                sendemail("szippantás történt")
+                notified_online = False
+                last_online_time = None
+                logging.info("Device confirmed offline")
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--interface")
-    parser.add_argument("-m", "--mactofind")
-    parser.add_argument("-w", "--wait",type=int, default=60*30, help="number of seconds to sleep between checking")
-    parser.add_argument("-n","--retry-num",type=int, default=10, help="number of retries in a check before accepting negative answer when state is known to be positive")
-    parser.add_argument("-N","--retry-num-fastpath",type=int, default=2, help="number of retries in a check before accepting negative answer when state is known to be negative")
-    parser.add_argument("-d","--retry-delay",type=int, default = 90, help="number of seconds to wait between retries")
+    parser.add_argument("-i", "--interface", required=True)
+    parser.add_argument("-m", "--mactofind", required=True)
+    parser.add_argument(
+        "-w",
+        "--wait",
+        type=int,
+        default=60 * 5,
+        help="number of seconds to sleep between scans (default: 300 = 5 min)",
+    )
+    parser.add_argument(
+        "-c",
+        "--cooldown",
+        type=int,
+        default=60 * 60 * 2,
+        help="number of seconds without seeing device before declaring offline (default: 7200 = 2 hours)",
+    )
 
     args = parser.parse_args()
+    logging.info(
+        f"Starting with scan interval={args.wait}s, offline cooldown={args.cooldown}s"
+    )
     while True:
-        online = ismaconline(
-            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower(), retry_num = args.retry_num, retry_num_fastpath = args.retry_num_fastpath, retry_delay=args.retry_delay
+        online = scan_once(
+            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower()
         )
-        handleonline(online)
-        time.sleep(int(args.wait))
+        handleonline(online, cooldown=args.cooldown)
+        time.sleep(args.wait)
