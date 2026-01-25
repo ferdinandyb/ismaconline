@@ -22,11 +22,6 @@ from email.message import EmailMessage
 import ssl
 
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-5s %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
-)
 logger = logging.getLogger(__name__)
 
 last_online_time = None
@@ -94,12 +89,19 @@ def scan_and_print_neighbors(net, interface, mactofind, timeout=15):
 
 def scan_once(interface_to_scan, mactofind):
     """Perform a single ARP scan and return True if MAC is found."""
+    logger.debug(f"scan_once called: interface={interface_to_scan}, mac={mactofind}")
     if os.geteuid() != 0:
         print("You need to be root to run this script", file=sys.stderr)
         sys.exit(1)
 
     for network, netmask, _, interface, address, _ in scapy.config.conf.route.routes:
+        logger.debug(
+            f"Checking route: {interface} {address} net={network} mask={netmask}"
+        )
         if interface_to_scan and interface_to_scan != interface:
+            logger.debug(
+                f"Skipping: interface mismatch ({interface} != {interface_to_scan})"
+            )
             continue
 
         # skip loopback network and default gw
@@ -109,9 +111,11 @@ def scan_once(interface_to_scan, mactofind):
             or address == "127.0.0.1"
             or address == "0.0.0.0"
         ):
+            logger.debug(f"Skipping: loopback/default gw")
             continue
 
         if netmask <= 0 or netmask == 0xFFFFFFFF:
+            logger.debug(f"Skipping: invalid netmask")
             continue
 
         # skip docker interface
@@ -124,18 +128,29 @@ def scan_once(interface_to_scan, mactofind):
             continue
 
         net = to_CIDR_notation(network, netmask)
+        logger.debug(f"CIDR notation: {net}")
 
         if net:
             if net.split(".")[0] != address.split(".")[0]:
                 net = ".".join(address.split(".")[:3]) + ".0/24"
-            if scan_and_print_neighbors(net, interface, mactofind):
+                logger.debug(f"Adjusted net to: {net}")
+            logger.debug(f"Running scan on {net}")
+            result = scan_and_print_neighbors(net, interface, mactofind)
+            logger.debug(f"Scan result: {result}")
+            if result:
                 return True
+        else:
+            logger.debug("to_CIDR_notation returned None, skipping")
+    logger.debug("scan_once returning False (no match found)")
     return False
 
 
 def handleonline(online, cooldown):
     """Handle state transitions with time-based cooldown."""
     global last_online_time, notified_online
+    logger.debug(
+        f"handleonline called: online={online}, notified_online={notified_online}, last_online_time={last_online_time}"
+    )
     now = time.time()
 
     if online:
@@ -143,18 +158,22 @@ def handleonline(online, cooldown):
             sendemail("szippantani kell")
             notified_online = True
         last_online_time = now
-        logging.info(f"Device seen, last_online_time updated")
+        logger.info("Device seen, last_online_time updated")
     else:
         if notified_online and last_online_time:
             time_since_last_seen = now - last_online_time
-            logging.info(
+            logger.info(
                 f"Device not seen, time since last seen: {time_since_last_seen:.0f}s / {cooldown}s"
             )
             if time_since_last_seen > cooldown:
                 sendemail("szippantás történt")
                 notified_online = False
                 last_online_time = None
-                logging.info("Device confirmed offline")
+                logger.info("Device confirmed offline")
+        else:
+            logger.debug(
+                f"Device not seen, but not yet tracking (notified_online={notified_online})"
+            )
 
 
 if __name__ == "__main__":
@@ -177,14 +196,33 @@ if __name__ == "__main__":
         default=60 * 60 * 2,
         help="number of seconds without seeing device before declaring offline (default: 7200 = 2 hours)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="enable debug logging",
+    )
 
     args = parser.parse_args()
-    logging.info(
+
+    # Configure logging based on verbosity
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)-5s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=log_level,
+    )
+
+    logger.info(
         f"Starting with scan interval={args.wait}s, offline cooldown={args.cooldown}s"
     )
     while True:
-        online = scan_once(
-            interface_to_scan=args.interface.lower(), mactofind=args.mactofind.lower()
-        )
-        handleonline(online, cooldown=args.cooldown)
+        try:
+            online = scan_once(
+                interface_to_scan=args.interface.lower(),
+                mactofind=args.mactofind.lower(),
+            )
+            handleonline(online, cooldown=args.cooldown)
+        except Exception as e:
+            logger.exception(f"Error in main loop: {e}")
         time.sleep(args.wait)
